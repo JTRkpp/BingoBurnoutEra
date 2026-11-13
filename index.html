@@ -1,1016 +1,397 @@
-```html
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bingo 5x5 Multiplayer - เล่นบิงโกกับเพื่อน</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts: Kanit & Inter for clean Thai typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style>
-        body {
-            font-family: 'Kanit', 'Inter', sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
-        }
-
-        /* Custom scrollbar for player tabs */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-
-        /* Bingo Cell Circle Animation */
-        @keyframes popIn {
-            0% { transform: scale(0.3); opacity: 0; }
-            70% { transform: scale(1.1); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .bingo-circle {
-            animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
-
-        /* Winning line subtle pulse */
-        @keyframes pulseGold {
-            0%, 100% { box-shadow: inset 0 0 0 2px #f59e0b; background-color: #fef3c7; }
-            50% { box-shadow: inset 0 0 0 3px #d97706; background-color: #fde68a; }
-        }
-
-        .winning-cell {
-            animation: pulseGold 2s infinite;
-        }
-
-        /* Smooth transitions */
-        .cell-transition {
-            transition: all 0.15s ease-in-out;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bingo 5x5 Multiplayer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Prompt', sans-serif; }
+    .bingo-circle {
+      position: absolute;
+      inset: 6px;
+      border: 4px solid #ef4444;
+      border-radius: 9999px;
+      pointer-events: none;
+      animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes popIn {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
 </head>
-<body class="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
 
-    <!-- Toast Notification Container (Replaces alert()) -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+  <!-- หน้าแรก: สร้างห้อง / เข้าห้อง -->
+  <div id="lobby-screen" class="flex-1 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-6">
+      <div class="text-center space-y-1">
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">BINGO 5×5</h1>
+        <p class="text-slate-400 text-sm">สร้างห้อง แต่งตารางกับเพื่อน แล้วเริ่มวงได้เลย!</p>
+      </div>
 
-    <!-- Custom Modal Container (Replaces confirm()) -->
-    <div id="modal-overlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 transform transition-all">
-            <div class="flex items-center gap-3 text-indigo-600 mb-3">
-                <i id="modal-icon" class="fa-solid fa-circle-question text-2xl"></i>
-                <h3 id="modal-title" class="text-lg font-semibold text-slate-800">ยืนยันการทำรายการ</h3>
-            </div>
-            <p id="modal-message" class="text-slate-600 text-sm mb-6 leading-relaxed">ข้อความแจ้งเตือน</p>
-            <div class="flex justify-end gap-3">
-                <button id="modal-cancel-btn" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
-                    ยกเลิก
-                </button>
-                <button id="modal-confirm-btn" class="px-4 py-2 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors">
-                    ยืนยัน
-                </button>
-            </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">ชื่อเล่นของคุณ</label>
+          <input id="player-name" type="text" placeholder="ใส่ชื่อเล่น..." maxlength="15"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500">
         </div>
-    </div>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-white/80 backdrop-blur-xs z-40 flex flex-col items-center justify-center">
-        <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
-        <p class="text-slate-600 font-medium text-sm">กำลังเชื่อมต่อระบบ...</p>
-    </div>
+        <button id="btn-create" onclick="createRoom()"
+          class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-indigo-500/20">
+          สร้างห้องใหม่ (เป็นหัวหน้าห้อง)
+        </button>
 
-    <!-- ========================================== -->
-    <!-- VIEW 1: HOME / CREATE OR JOIN ROOM         -->
-    <!-- ========================================== -->
-    <main id="home-view" class="flex-1 flex items-center justify-center p-4 hidden">
-        <div class="max-w-md w-full bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
-            <!-- Header Banner -->
-            <div class="bg-gradient-to-r from-indigo-600 to-violet-600 p-8 text-center text-white relative overflow-hidden">
-                <div class="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-                <div class="absolute -bottom-8 -left-8 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
-                <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md mb-4 shadow-inner">
-                    <i class="fa-solid fa-table-cells text-2xl text-white"></i>
-                </div>
-                <h1 class="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Bingo 5x5</h1>
-                <p class="text-indigo-100 text-sm font-light">สร้างตารางบิงโกและเล่นกับเพื่อนแบบเรียลไทม์</p>
-            </div>
-
-            <!-- Form Section -->
-            <div class="p-6 sm:p-8 space-y-6">
-                <!-- Player Name Input -->
-                <div>
-                    <label for="player-name-input" class="block text-sm font-medium text-slate-700 mb-1.5">
-                        ชื่อเล่นของคุณ <span class="text-rose-500">*</span>
-                    </label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                            <i class="fa-solid fa-user"></i>
-                        </div>
-                        <input type="text" id="player-name-input" maxlength="20" placeholder="เช่น น้องบิงโก, ต้นกล้า..."
-                            class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all">
-                    </div>
-                </div>
-
-                <!-- Action Tabs -->
-                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-                    <button id="tab-create" class="py-2 text-sm font-medium rounded-lg bg-white text-indigo-600 shadow-xs transition-all">
-                        สร้างห้องใหม่
-                    </button>
-                    <button id="tab-join" class="py-2 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 transition-all">
-                        เข้าร่วมห้อง
-                    </button>
-                </div>
-
-                <!-- Create Room Panel -->
-                <div id="panel-create" class="space-y-4">
-                    <p class="text-xs text-slate-500 text-center leading-relaxed">
-                        สร้างห้องใหม่เพื่อรับรหัสห้อง 6 หลัก แล้วส่งให้เพื่อนเข้ามาช่วยกันแต่งตารางบิงโก!
-                    </p>
-                    <button id="btn-create-room" class="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-medium rounded-xl shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-plus-circle"></i>
-                        <span>สร้างห้องเล่นเกม</span>
-                    </button>
-                </div>
-
-                <!-- Join Room Panel -->
-                <div id="panel-join" class="space-y-4 hidden">
-                    <div>
-                        <label for="room-code-input" class="block text-sm font-medium text-slate-700 mb-1.5">
-                            รหัสห้อง (Room Code)
-                        </label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                                <i class="fa-solid fa-hashtag"></i>
-                            </div>
-                            <input type="text" id="room-code-input" maxlength="6" placeholder="กรอกรหัส 6 หลัก เช่น A1B2C3"
-                                class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 uppercase tracking-widest font-semibold placeholder-slate-400 placeholder:font-normal placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all">
-                        </div>
-                    </div>
-                    <button id="btn-join-room" class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-medium rounded-xl shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-right-to-bracket"></i>
-                        <span>เข้าร่วมห้องทันที</span>
-                    </button>
-                </div>
-            </div>
+        <div class="relative flex py-1 items-center">
+          <div class="flex-grow border-t border-slate-800"></div>
+          <span class="flex-shrink mx-3 text-slate-500 text-xs">หรือเข้าร่วมห้องเพื่อน</span>
+          <div class="flex-grow border-t border-slate-800"></div>
         </div>
-    </main>
 
-    <!-- ========================================== -->
-    <!-- VIEW 2: GAME ROOM (LOBBY & PLAYING PHASE)  -->
-    <!-- ========================================== -->
-    <div id="room-view" class="flex-1 flex flex-col max-w-4xl w-full mx-auto p-3 sm:p-6 hidden">
-        
-        <!-- Top Navigation & Room Info Bar -->
-        <header class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-3 sm:p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
-            <!-- Left: Room Code & Copy -->
-            <div class="flex items-center gap-2.5">
-                <button id="btn-leave-room" title="ออกจากห้อง" class="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors">
-                    <i class="fa-solid fa-arrow-right-from-bracket rotate-180"></i>
-                </button>
-                <div class="h-8 w-[1px] bg-slate-200"></div>
-                <div>
-                    <div class="text-[11px] text-slate-400 font-medium uppercase tracking-wider">รหัสห้อง (Room Code)</div>
-                    <div class="flex items-center gap-2">
-                        <span id="display-room-code" class="text-lg sm:text-xl font-bold text-indigo-600 tracking-widest">------</span>
-                        <button id="btn-copy-code" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5">
-                            <i class="fa-regular fa-copy"></i>
-                            <span>คัดลอก</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
+        <div class="flex gap-2">
+          <input id="join-code" type="text" placeholder="รหัสห้อง 5 หลัก" maxlength="5"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white uppercase tracking-widest text-center font-bold focus:outline-none focus:border-purple-500">
+          <button id="btn-join" onclick="joinRoom()"
+            class="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-3 rounded-xl transition whitespace-nowrap">
+            เข้าร่วม
+          </button>
+        </div>
+      </div>
+      <p id="lobby-status" class="text-center text-xs text-amber-400 hidden"></p>
+    </div>
+  </div>
 
-            <!-- Right: Game Status Badge & Host Controls -->
-            <div class="flex items-center gap-2 sm:gap-3 ml-auto">
-                <!-- Status Badge -->
-                <div id="room-status-badge" class="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200">
-                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                    <span id="room-status-text">กำลังเตรียมตัว (แก้ไขตารางได้)</span>
-                </div>
+  <!-- หน้าเล่นเกม -->
+  <div id="game-screen" class="hidden flex-1 flex flex-col max-w-2xl mx-auto w-full p-4 pb-16">
+    <!-- แถบด้านบน -->
+    <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900 border border-slate-800 p-3 rounded-2xl mb-4">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400">รหัสห้อง:</span>
+        <button onclick="copyRoomCode()" class="bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded-lg font-mono font-bold text-indigo-400 tracking-wider flex items-center gap-1.5 text-sm">
+          <span id="display-room-code">-----</span>
+          <span class="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">คัดลอก</span>
+        </button>
+      </div>
 
-                <!-- Start Game Button (Visible ONLY to Host during Setup) -->
-                <button id="btn-start-game" class="hidden px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-sm font-medium rounded-xl shadow-sm shadow-emerald-200 transition-all flex items-center gap-2 active:scale-95">
-                    <i class="fa-solid fa-play"></i>
-                    <span>เริ่มเกม</span>
-                </button>
-            </div>
-        </header>
+      <div id="phase-badge" class="text-xs font-medium px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+        กำลังแต่งตาราง
+      </div>
 
-        <!-- Players Selector Bar (Switch between own board and friends' boards) -->
-        <section class="mb-4">
-            <div class="flex items-center justify-between mb-2 px-1">
-                <span class="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                    <i class="fa-solid fa-users text-indigo-500"></i>
-                    ผู้เล่นในห้อง (<span id="player-count">0</span>) — คลิกชื่อเพื่อดู/แก้ไขตาราง
-                </span>
-            </div>
-            <div id="players-list" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-                <!-- Player pills injected dynamically via JS -->
-            </div>
-        </section>
-
-        <!-- Main Board Area -->
-        <section class="flex-1 flex flex-col items-center justify-center">
-            <div class="w-full max-w-xl bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-200/80 p-4 sm:p-6">
-                
-                <!-- Active Board Header Info -->
-                <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-                    <div class="flex items-center gap-2.5">
-                        <div id="viewing-avatar" class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
-                            ?
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h2 id="viewing-player-name" class="font-semibold text-slate-800 text-base sm:text-lg">
-                                    กำลังโหลด...
-                                </h2>
-                                <span id="viewing-badge" class="px-2 py-0.5 text-[11px] font-medium rounded-md bg-indigo-50 text-indigo-600">
-                                    ตารางของคุณ
-                                </span>
-                            </div>
-                            <p id="board-instruction" class="text-xs text-slate-500 mt-0.5">
-                                พิมพ์ข้อความลงในช่องตารางด้านล่าง (บันทึกอัตโนมัติ)
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Quick Fill / Clear tools (Only in Setup Phase) -->
-                    <div id="setup-tools" class="flex items-center gap-1.5">
-                        <button id="btn-random-numbers" title="สุ่มตัวเลข 1-25 ลงช่องว่าง" class="p-2 text-xs font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors flex items-center gap-1">
-                            <i class="fa-solid fa-shuffle"></i>
-                            <span class="hidden sm:inline">สุ่มเลข 1-25</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 5x5 BINGO GRID -->
-                <div class="relative w-full aspect-square max-w-[480px] mx-auto">
-                    <div id="bingo-grid" class="grid grid-cols-5 grid-rows-5 gap-1.5 sm:gap-2.5 w-full h-full">
-                        <!-- 25 cells generated dynamically via JS -->
-                    </div>
-                </div>
-
-                <!-- Board Footer: Helper Text (Left) & Bingo Counter (Bottom Right as requested) -->
-                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <div id="footer-hint" class="text-xs text-slate-400 flex items-center gap-1.5">
-                        <i class="fa-solid fa-circle-info"></i>
-                        <span>ทุกคนสามารถช่วยกันแก้ไขตารางได้ก่อนเริ่มเกม</span>
-                    </div>
-
-                    <!-- Bottom-Right Bingo Counter (Subtle, not too large) -->
-                    <div class="ml-auto flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
-                        <span class="text-xs text-slate-500">ตอนนี้:</span>
-                        <span id="bingo-count-display" class="text-sm font-bold text-indigo-600">0</span>
-                        <span class="text-xs font-medium text-slate-600">บิงโก</span>
-                    </div>
-                </div>
-
-            </div>
-        </section>
+      <button id="btn-start-game" onclick="startGame()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-lg shadow-emerald-500/20">
+        เริ่มเล่น (ล็อกตาราง)
+      </button>
     </div>
 
-    <!-- Hidden textarea for safe clipboard fallback -->
-    <textarea id="clipboard-helper" class="fixed -top-96 left-0 opacity-0 pointer-events-none"></textarea>
+    <!-- รายชื่อผู้เล่น (กดสลับดูตารางเพื่อนได้) -->
+    <div class="mb-3">
+      <div class="text-xs text-slate-400 mb-1.5">เลือกดูตารางของ:</div>
+      <div id="player-tabs" class="flex gap-2 overflow-x-auto pb-1"></div>
+    </div>
 
-    <!-- ========================================== -->
-    <!-- FIREBASE & APPLICATION LOGIC               -->
-    <!-- ========================================== -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- หัวข้อตารางที่กำลังดู -->
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-sm font-semibold text-slate-200">
+        ตารางของ: <span id="viewing-player-name" class="text-indigo-400">-</span>
+      </h2>
+      <span id="edit-hint" class="text-xs text-slate-400">แตะช่องเพื่อพิมพ์ข้อความ</span>
+    </div>
 
-        // 1. Initialize Firebase with Environment Globals
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bingo-5x5-default';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    <!-- ตาราง 5x5 -->
+    <div id="bingo-grid" class="grid grid-cols-5 gap-1.5 sm:gap-2 aspect-square w-full bg-slate-900 p-2 rounded-2xl border border-slate-800 shadow-xl">
+      <!-- ช่องตารางจะถูกสร้างด้วย JS -->
+    </div>
+  </div>
 
-        let app, auth, db;
-        let currentUser = null;
+  <!-- ตัวนับบิงโกมุมขวาล่าง -->
+  <div id="bingo-counter" class="hidden fixed bottom-3 right-3 bg-slate-900/90 backdrop-blur border border-slate-700 px-3 py-1.5 rounded-xl shadow-lg text-xs text-slate-300">
+    ตอนนี้: <span id="bingo-count-num" class="font-bold text-rose-400 text-sm">0</span> บิงโก
+  </div>
 
-        // Application State
-        let state = {
-            roomCode: null,
-            roomData: null,
-            viewingPlayerId: null,
-            unsubscribeRoom: null,
-            saveTimers: {} // Debounce timers per cell
+  <script>
+    let peer = null;
+    let isHost = false;
+    let myId = '';
+    let myName = '';
+    let roomCode = '';
+    let viewingId = '';
+    let connections = []; // สำหรับ Host เก็บการเชื่อมต่อลูกห้อง
+    let hostConn = null;  // สำหรับลูกห้องเชื่อมต่อหา Host
+
+    // สถานะกลางของห้อง
+    let gameState = {
+      started: false,
+      players: {} // { id: { name, board: Array(25).fill(''), marks: Array(25).fill(false) } }
+    };
+
+    function generateCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let res = '';
+      for (let i = 0; i < 5; i++) res += chars[Math.floor(Math.random() * chars.length)];
+      return res;
+    }
+
+    function showStatus(msg) {
+      const el = document.getElementById('lobby-status');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    // สร้างห้อง (Host)
+    function createRoom() {
+      myName = document.getElementById('player-name').value.trim();
+      if (!myName) return alert('กรุณาใส่ชื่อเล่นก่อนครับ');
+
+      isHost = true;
+      roomCode = generateCode();
+      showStatus('กำลังสร้างห้อง...');
+
+      peer = new Peer('BINGO-' + roomCode);
+      peer.on('open', (id) => {
+        myId = id;
+        gameState.players[myId] = {
+          name: myName,
+          board: Array(25).fill(''),
+          marks: Array(25).fill(false)
         };
+        viewingId = myId;
+        enterGameScreen();
+      });
 
-        // DOM Elements
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const homeView = document.getElementById('home-view');
-        const roomView = document.getElementById('room-view');
-        const playerNameInput = document.getElementById('player-name-input');
-        const roomCodeInput = document.getElementById('room-code-input');
+      peer.on('connection', (conn) => {
+        connections.push(conn);
+        conn.on('data', (data) => handleHostReceive(conn, data));
+        conn.on('close', () => {
+          connections = connections.filter(c => c !== conn);
+        });
+      });
+
+      peer.on('error', (err) => {
+        showStatus('เกิดข้อผิดพลาด ลองกดสร้างห้องใหม่อีกครั้ง (' + err.type + ')');
+      });
+    }
+
+    // เข้าร่วมห้อง (Client)
+    function joinRoom() {
+      myName = document.getElementById('player-name').value.trim();
+      roomCode = document.getElementById('join-code').value.trim().toUpperCase();
+      if (!myName) return alert('กรุณาใส่ชื่อเล่นก่อนครับ');
+      if (roomCode.length < 5) return alert('กรุณาใส่รหัสห้อง 5 หลักให้ครบ');
+
+      isHost = false;
+      showStatus('กำลังเชื่อมต่อเข้าห้อง...');
+
+      peer = new Peer();
+      peer.on('open', (id) => {
+        myId = id;
+        hostConn = peer.connect('BINGO-' + roomCode);
         
-        // Tabs
-        const tabCreate = document.getElementById('tab-create');
-        const tabJoin = document.getElementById('tab-join');
-        const panelCreate = document.getElementById('panel-create');
-        const panelJoin = document.getElementById('panel-join');
-
-        // Room Elements
-        const displayRoomCode = document.getElementById('display-room-code');
-        const roomStatusBadge = document.getElementById('room-status-badge');
-        const roomStatusText = document.getElementById('room-status-text');
-        const btnStartGame = document.getElementById('btn-start-game');
-        const playersList = document.getElementById('players-list');
-        const playerCount = document.getElementById('player-count');
-        const viewingAvatar = document.getElementById('viewing-avatar');
-        const viewingPlayerName = document.getElementById('viewing-player-name');
-        const viewingBadge = document.getElementById('viewing-badge');
-        const boardInstruction = document.getElementById('board-instruction');
-        const setupTools = document.getElementById('setup-tools');
-        const bingoGrid = document.getElementById('bingo-grid');
-        const footerHint = document.getElementById('footer-hint');
-        const bingoCountDisplay = document.getElementById('bingo-count-display');
-
-        // ==========================================
-        // UI HELPER FUNCTIONS (Toast & Modal)
-        // ==========================================
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            
-            const colors = {
-                info: 'bg-slate-800 text-white',
-                success: 'bg-emerald-600 text-white',
-                error: 'bg-rose-600 text-white',
-                warning: 'bg-amber-500 text-white'
-            };
-
-            const icons = {
-                info: 'fa-circle-info',
-                success: 'fa-circle-check',
-                error: 'fa-circle-exclamation',
-                warning: 'fa-triangle-exclamation'
-            };
-
-            toast.className = `${colors[type] || colors.info} px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-sm font-medium transform transition-all duration-300 translate-x-full opacity-0 pointer-events-auto max-w-xs`;
-            toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${message}</span>`;
-            
-            container.appendChild(toast);
-            
-            requestAnimationFrame(() => {
-                toast.classList.remove('translate-x-full', 'opacity-0');
-            });
-
-            setTimeout(() => {
-                toast.classList.add('translate-x-full', 'opacity-0');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-
-        function showConfirmModal(title, message, onConfirm) {
-            const overlay = document.getElementById('modal-overlay');
-            const titleEl = document.getElementById('modal-title');
-            const msgEl = document.getElementById('modal-message');
-            const btnCancel = document.getElementById('modal-cancel-btn');
-            const btnConfirm = document.getElementById('modal-confirm-btn');
-
-            titleEl.textContent = title;
-            msgEl.textContent = message;
-
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
-
-            const cleanup = () => {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('flex');
-                btnCancel.onclick = null;
-                btnConfirm.onclick = null;
-            };
-
-            btnCancel.onclick = cleanup;
-            btnConfirm.onclick = () => {
-                cleanup();
-                onConfirm();
-            };
-        }
-
-        function copyToClipboard(text) {
-            const helper = document.getElementById('clipboard-helper');
-            helper.value = text;
-            helper.select();
-            try {
-                document.execCommand('copy');
-                showToast(`คัดลอกรหัสห้อง "${text}" แล้ว!`, 'success');
-            } catch (err) {
-                showToast('ไม่สามารถคัดลอกได้ กรุณาจดรหัสห้องด้วยตนเอง', 'error');
-            }
-        }
-
-        // ==========================================
-        // AUTHENTICATION INITIALIZATION
-        // ==========================================
-        async function initApp() {
-            if (!firebaseConfig) {
-                loadingOverlay.innerHTML = `<p class="text-rose-600 font-medium">ไม่พบการตั้งค่าฐานข้อมูล (Firebase Config Missing)</p>`;
-                return;
-            }
-
-            try {
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                // Rule 3: Auth Before Queries
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        currentUser = user;
-                        loadingOverlay.classList.add('hidden');
-                        homeView.classList.remove('hidden');
-                    }
-                });
-            } catch (error) {
-                console.error("Auth error:", error);
-                loadingOverlay.innerHTML = `<p class="text-rose-600 font-medium">เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}</p>`;
-            }
-        }
-
-        // ==========================================
-        // BINGO LOGIC & LINE DETECTION
-        // ==========================================
-        // All 12 winning lines for a 5x5 grid (indices 0 to 24)
-        const WINNING_LINES = [
-            // 5 Horizontal Rows
-            [0, 1, 2, 3, 4],
-            [5, 6, 7, 8, 9],
-            [10, 11, 12, 13, 14],
-            [15, 16, 17, 18, 19],
-            [20, 21, 22, 23, 24],
-            // 5 Vertical Columns
-            [0, 5, 10, 15, 20],
-            [1, 6, 11, 16, 21],
-            [2, 7, 12, 17, 22],
-            [3, 8, 13, 18, 23],
-            [4, 9, 14, 19, 24],
-            // 2 Diagonals
-            [0, 6, 12, 18, 24],
-            [4, 8, 12, 16, 20]
-        ];
-
-        function calculateBingos(markedArray) {
-            if (!Array.isArray(markedArray) || markedArray.length !== 25) {
-                return { count: 0, winningIndices: new Set() };
-            }
-
-            let count = 0;
-            const winningIndices = new Set();
-
-            for (const line of WINNING_LINES) {
-                const isComplete = line.every(idx => markedArray[idx] === true);
-                if (isComplete) {
-                    count++;
-                    line.forEach(idx => winningIndices.add(idx));
-                }
-            }
-
-            return { count, winningIndices };
-        }
-
-        function generateRoomCode() {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude confusing chars like O, 0, I, 1
-            let result = '';
-            for (let i = 0; i < 6; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
-        }
-
-        function createEmptyBoard() {
-            return {
-                cells: Array(25).fill(''),
-                marked: Array(25).fill(false)
-            };
-        }
-
-        // ==========================================
-        // FIRESTORE ROOM OPERATIONS (RULE 1 COMPLIANT)
-        // ==========================================
-        function getRoomDocRef(code) {
-            // Public data path: /artifacts/{appId}/public/data/bingo_rooms/{code}
-            return doc(db, 'artifacts', appId, 'public', 'data', 'bingo_rooms', code);
-        }
-
-        async function handleCreateRoom() {
-            if (!currentUser) return;
-            const playerName = playerNameInput.value.trim();
-            if (!playerName) {
-                showToast('กรุณาใส่ชื่อเล่นของคุณก่อนสร้างห้อง', 'warning');
-                playerNameInput.focus();
-                return;
-            }
-
-            const btn = document.getElementById('btn-create-room');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>กำลังสร้างห้อง...</span>`;
-
-            try {
-                const code = generateRoomCode();
-                const roomRef = getRoomDocRef(code);
-
-                const initialRoomData = {
-                    roomCode: code,
-                    hostId: currentUser.uid,
-                    status: 'setup', // 'setup' | 'playing'
-                    createdAt: Date.now(),
-                    players: {
-                        [currentUser.uid]: {
-                            id: currentUser.uid,
-                            name: playerName,
-                            joinedAt: Date.now()
-                        }
-                    },
-                    boards: {
-                        [currentUser.uid]: createEmptyBoard()
-                    }
-                };
-
-                await setDoc(roomRef, initialRoomData);
-                enterRoom(code);
-                showToast('สร้างห้องสำเร็จ! แชร์รหัสให้เพื่อนได้เลย', 'success');
-            } catch (error) {
-                console.error("Create room error:", error);
-                showToast('สร้างห้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-plus-circle"></i><span>สร้างห้องเล่นเกม</span>`;
-            }
-        }
-
-        async function handleJoinRoom() {
-            if (!currentUser) return;
-            const playerName = playerNameInput.value.trim();
-            const code = roomCodeInput.value.trim().toUpperCase();
-
-            if (!playerName) {
-                showToast('กรุณาใส่ชื่อเล่นของคุณก่อนเข้าร่วมห้อง', 'warning');
-                playerNameInput.focus();
-                return;
-            }
-            if (code.length < 4) {
-                showToast('กรุณากรอกรหัสห้องให้ถูกต้อง', 'warning');
-                roomCodeInput.focus();
-                return;
-            }
-
-            const btn = document.getElementById('btn-join-room');
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>กำลังเข้าร่วม...</span>`;
-
-            try {
-                const roomRef = getRoomDocRef(code);
-                const snap = await getDoc(roomRef);
-
-                if (!snap.exists()) {
-                    showToast('ไม่พบห้องนี้ กรุณาตรวจสอบรหัสห้องอีกครั้ง', 'error');
-                    return;
-                }
-
-                const data = snap.data();
-
-                // Register player if not already in room, or update name
-                const updates = {
-                    [`players.${currentUser.uid}`]: {
-                        id: currentUser.uid,
-                        name: playerName,
-                        joinedAt: data.players?.[currentUser.uid]?.joinedAt || Date.now()
-                    }
-                };
-
-                // Initialize empty board if player doesn't have one yet
-                if (!data.boards || !data.boards[currentUser.uid]) {
-                    updates[`boards.${currentUser.uid}`] = createEmptyBoard();
-                }
-
-                await updateDoc(roomRef, updates);
-                enterRoom(code);
-                showToast(`เข้าร่วมห้อง ${code} สำเร็จ!`, 'success');
-            } catch (error) {
-                console.error("Join room error:", error);
-                showToast('ไม่สามารถเข้าร่วมห้องได้: ' + error.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i><span>เข้าร่วมห้องทันที</span>`;
-            }
-        }
-
-        function enterRoom(code) {
-            state.roomCode = code;
-            state.viewingPlayerId = currentUser.uid;
-
-            homeView.classList.add('hidden');
-            roomView.classList.remove('hidden');
-            displayRoomCode.textContent = code;
-
-            // Build initial 25 grid cells DOM
-            buildGridDOM();
-
-            // Subscribe to real-time updates
-            const roomRef = getRoomDocRef(code);
-            if (state.unsubscribeRoom) state.unsubscribeRoom();
-
-            state.unsubscribeRoom = onSnapshot(roomRef, (docSnap) => {
-                if (!docSnap.exists()) {
-                    showToast('ห้องนี้ถูกปิดไปแล้ว', 'error');
-                    leaveRoom();
-                    return;
-                }
-
-                const prevStatus = state.roomData?.status;
-                state.roomData = docSnap.data();
-
-                // Notify when game starts
-                if (prevStatus === 'setup' && state.roomData.status === 'playing') {
-                    showToast('เกมเริ่มแล้ว! ตารางถูกล็อก กดวงช่องที่ได้ได้เลย', 'success');
-                    // Blur any active textarea
-                    if (document.activeElement) document.activeElement.blur();
-                }
-
-                renderRoomState();
-            }, (error) => {
-                console.error("Snapshot error:", error);
-                showToast('การเชื่อมต่อข้อมูลห้องขัดข้อง', 'error');
-            });
-        }
-
-        function leaveRoom() {
-            if (state.unsubscribeRoom) {
-                state.unsubscribeRoom();
-                state.unsubscribeRoom = null;
-            }
-            state.roomCode = null;
-            state.roomData = null;
-            state.viewingPlayerId = null;
-
-            roomView.classList.add('hidden');
-            homeView.classList.remove('hidden');
-        }
-
-        // ==========================================
-        // RENDERING & REAL-TIME SYNC
-        // ==========================================
-        function buildGridDOM() {
-            bingoGrid.innerHTML = '';
-            for (let i = 0; i < 25; i++) {
-                const cellWrapper = document.createElement('div');
-                cellWrapper.dataset.index = i;
-                cellWrapper.className = 'relative bg-slate-50 border-2 border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden cell-transition flex items-center justify-center select-none';
-
-                // Textarea for Setup Phase
-                const textarea = document.createElement('textarea');
-                textarea.dataset.index = i;
-                textarea.placeholder = `${i + 1}`;
-                textarea.maxLength = 40;
-                textarea.className = 'w-full h-full p-1.5 sm:p-2 text-center bg-transparent resize-none border-none focus:outline-none focus:bg-indigo-50/50 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-300 flex items-center justify-center leading-tight';
-                
-                // Center text vertically roughly via padding/line-height
-                textarea.addEventListener('input', (e) => handleCellTextInput(i, e.target.value));
-
-                // Display Overlay for Playing Phase (and Circle Mark)
-                const playDisplay = document.createElement('div');
-                playDisplay.dataset.role = 'play-display';
-                playDisplay.className = 'hidden w-full h-full p-1.5 sm:p-2 flex items-center justify-center text-center text-xs sm:text-sm font-semibold text-slate-800 break-words leading-tight cursor-pointer relative z-10';
-                playDisplay.addEventListener('click', () => handleCellClick(i));
-
-                // Circle SVG Marker
-                const circleMarker = document.createElement('div');
-                circleMarker.dataset.role = 'circle-marker';
-                circleMarker.className = 'hidden absolute inset-0 pointer-events-none flex items-center justify-center z-20 p-1.5 sm:p-2';
-                circleMarker.innerHTML = `
-                    <svg viewBox="0 0 100 100" class="w-full h-full text-rose-500/85 bingo-circle drop-shadow-xs">
-                        <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" />
-                    </svg>
-                `;
-
-                cellWrapper.appendChild(textarea);
-                cellWrapper.appendChild(playDisplay);
-                cellWrapper.appendChild(circleMarker);
-                bingoGrid.appendChild(cellWrapper);
-            }
-        }
-
-        function renderRoomState() {
-            const data = state.roomData;
-            if (!data || !currentUser) return;
-
-            const isHost = data.hostId === currentUser.uid;
-            const isPlaying = data.status === 'playing';
-
-            // 1. Update Header Status & Host Start Button
-            if (isPlaying) {
-                roomStatusBadge.className = 'px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200';
-                roomStatusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>กำลังเล่นเกม (ล็อกตารางแล้ว)</span>`;
-                btnStartGame.classList.add('hidden');
-            } else {
-                roomStatusBadge.className = 'px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200';
-                roomStatusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span><span>ช่วงเตรียมตัว (แก้ไขได้)</span>`;
-                
-                if (isHost) {
-                    btnStartGame.classList.remove('hidden');
-                } else {
-                    btnStartGame.classList.add('hidden');
-                }
-            }
-
-            // 2. Render Players List Tabs
-            const playersObj = data.players || {};
-            const playersArr = Object.values(playersObj).sort((a, b) => a.joinedAt - b.joinedAt);
-            playerCount.textContent = playersArr.length;
-
-            // Ensure viewingPlayerId is valid
-            if (!playersObj[state.viewingPlayerId]) {
-                state.viewingPlayerId = currentUser.uid;
-            }
-
-            playersList.innerHTML = '';
-            playersArr.forEach(player => {
-                const isSelected = player.id === state.viewingPlayerId;
-                const isMe = player.id === currentUser.uid;
-                const isPlayerHost = player.id === data.hostId;
-                
-                // Calculate bingo count badge for each player
-                const pBoard = data.boards?.[player.id] || createEmptyBoard();
-                const { count: pBingos } = calculateBingos(pBoard.marked);
-
-                const btn = document.createElement('button');
-                btn.className = `shrink-0 px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 border ${
-                    isSelected 
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' 
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
-                }`;
-
-                let badgesHtml = '';
-                if (isPlayerHost) {
-                    badgesHtml += `<i class="fa-solid fa-crown text-[11px] ${isSelected ? 'text-amber-300' : 'text-amber-500'}" title="หัวหน้าห้อง"></i>`;
-                }
-                if (isPlaying && pBingos > 0) {
-                    badgesHtml += `<span class="px-1.5 py-0.5 text-[10px] rounded-md font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}">${pBingos} บิงโก</span>`;
-                }
-
-                btn.innerHTML = `
-                    <span>${escapeHtml(player.name)}${isMe ? ' (คุณ)' : ''}</span>
-                    ${badgesHtml}
-                `;
-
-                btn.onclick = () => {
-                    state.viewingPlayerId = player.id;
-                    renderRoomState();
-                };
-
-                playersList.appendChild(btn);
-            });
-
-            // 3. Update Viewing Board Header Info
-            const viewedPlayer = playersObj[state.viewingPlayerId] || { name: 'ผู้เล่น' };
-            const isViewingMe = state.viewingPlayerId === currentUser.uid;
-
-            viewingAvatar.textContent = viewedPlayer.name.charAt(0).toUpperCase();
-            viewingPlayerName.textContent = viewedPlayer.name;
-
-            if (isViewingMe) {
-                viewingBadge.textContent = 'ตารางของคุณ';
-                viewingBadge.className = 'px-2 py-0.5 text-[11px] font-medium rounded-md bg-indigo-50 text-indigo-600';
-            } else {
-                viewingBadge.textContent = 'ตารางของเพื่อน';
-                viewingBadge.className = 'px-2 py-0.5 text-[11px] font-medium rounded-md bg-purple-50 text-purple-600';
-            }
-
-            if (isPlaying) {
-                boardInstruction.textContent = 'คลิกที่ช่องเพื่อวงกลม / ยกเลิกวงกลม';
-                setupTools.classList.add('hidden');
-                footerHint.innerHTML = `<i class="fa-solid fa-lock text-slate-400"></i><span>ตารางถูกล็อกแล้ว ไม่สามารถแก้ไขข้อความได้</span>`;
-            } else {
-                boardInstruction.textContent = isViewingMe 
-                    ? 'พิมพ์ข้อความลงในตารางของคุณ (เพื่อนสามารถเข้ามาช่วยแก้ไขได้)' 
-                    : `คุณกำลังดูตารางของ ${viewedPlayer.name} (สามารถพิมพ์แก้ไขให้เพื่อนได้)`;
-                setupTools.classList.remove('hidden');
-                footerHint.innerHTML = `<i class="fa-solid fa-pen-to-square text-indigo-400"></i><span>รอหัวหน้าห้องกด "เริ่มเกม" เพื่อล็อกตาราง</span>`;
-            }
-
-            // 4. Update 5x5 Grid Cells
-            const board = data.boards?.[state.viewingPlayerId] || createEmptyBoard();
-            const { count: bingoCount, winningIndices } = calculateBingos(board.marked);
-
-            // Update bottom-right bingo counter
-            bingoCountDisplay.textContent = bingoCount;
-
-            const cellWrappers = bingoGrid.children;
-            for (let i = 0; i < 25; i++) {
-                const wrapper = cellWrappers[i];
-                const textarea = wrapper.querySelector('textarea');
-                const playDisplay = wrapper.querySelector('[data-role="play-display"]');
-                const circleMarker = wrapper.querySelector('[data-role="circle-marker"]');
-
-                const cellText = board.cells?.[i] || '';
-                const isMarked = board.marked?.[i] === true;
-                const isWinning = isPlaying && winningIndices.has(i);
-
-                if (isPlaying) {
-                    // PLAYING MODE: Hide textarea, show clickable text & circle
-                    textarea.classList.add('hidden');
-                    playDisplay.classList.remove('hidden');
-                    playDisplay.textContent = cellText || '-';
-
-                    if (isMarked) {
-                        circleMarker.classList.remove('hidden');
-                        wrapper.classList.add('border-rose-300', 'bg-rose-50/30');
-                        wrapper.classList.remove('border-slate-200', 'bg-slate-50');
-                    } else {
-                        circleMarker.classList.add('hidden');
-                        wrapper.classList.remove('border-rose-300', 'bg-rose-50/30');
-                        wrapper.classList.add('border-slate-200', 'bg-slate-50');
-                    }
-
-                    if (isWinning) {
-                        wrapper.classList.add('winning-cell');
-                    } else {
-                        wrapper.classList.remove('winning-cell');
-                    }
-                } else {
-                    // SETUP MODE: Show editable textarea, hide play display
-                    textarea.classList.remove('hidden');
-                    playDisplay.classList.add('hidden');
-                    circleMarker.classList.add('hidden');
-                    wrapper.classList.remove('winning-cell', 'border-rose-300', 'bg-rose-50/30');
-                    wrapper.classList.add('border-slate-200', 'bg-slate-50');
-
-                    // Only update textarea value if user isn't actively typing in that exact cell
-                    if (document.activeElement !== textarea) {
-                        textarea.value = cellText;
-                    }
-                }
-            }
-        }
-
-        // ==========================================
-        // CELL INTERACTIONS (EDITING & MARKING)
-        // ==========================================
-        function handleCellTextInput(index, newValue) {
-            if (!state.roomData || state.roomData.status !== 'setup') return;
-            const targetPlayerId = state.viewingPlayerId;
-            if (!targetPlayerId) return;
-
-            // Update local optimistic state immediately so typing feels instant
-            if (!state.roomData.boards[targetPlayerId]) {
-                state.roomData.boards[targetPlayerId] = createEmptyBoard();
-            }
-            state.roomData.boards[targetPlayerId].cells[index] = newValue;
-
-            // Debounce Firestore write to prevent excessive writes while typing
-            const timerKey = `${targetPlayerId}_${index}`;
-            if (state.saveTimers[timerKey]) {
-                clearTimeout(state.saveTimers[timerKey]);
-            }
-
-            state.saveTimers[timerKey] = setTimeout(async () => {
-                try {
-                    const roomRef = getRoomDocRef(state.roomCode);
-                    const updatedCells = [...state.roomData.boards[targetPlayerId].cells];
-                    updatedCells[index] = newValue;
-
-                    await updateDoc(roomRef, {
-                        [`boards.${targetPlayerId}.cells`]: updatedCells
-                    });
-                } catch (err) {
-                    console.error("Failed to save cell text:", err);
-                }
-            }, 300);
-        }
-
-        async function handleCellClick(index) {
-            // Only allow marking during 'playing' phase
-            if (!state.roomData || state.roomData.status !== 'playing') return;
-            const targetPlayerId = state.viewingPlayerId;
-            if (!targetPlayerId) return;
-
-            try {
-                const roomRef = getRoomDocRef(state.roomCode);
-                const currentMarked = state.roomData.boards?.[targetPlayerId]?.marked || Array(25).fill(false);
-                const updatedMarked = [...currentMarked];
-                updatedMarked[index] = !updatedMarked[index];
-
-                // Optimistic UI update
-                state.roomData.boards[targetPlayerId].marked = updatedMarked;
-                renderRoomState();
-
-                await updateDoc(roomRef, {
-                    [`boards.${targetPlayerId}.marked`]: updatedMarked
-                });
-            } catch (err) {
-                console.error("Failed to toggle cell mark:", err);
-                showToast('บันทึกสถานะช่องไม่สำเร็จ', 'error');
-            }
-        }
-
-        async function handleRandomFillNumbers() {
-            if (!state.roomData || state.roomData.status !== 'setup') return;
-            const targetPlayerId = state.viewingPlayerId;
-            if (!targetPlayerId) return;
-
-            // Generate shuffled 1 to 25
-            const nums = Array.from({ length: 25 }, (_, i) => String(i + 1));
-            for (let i = nums.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [nums[i], nums[j]] = [nums[j], nums[i]];
-            }
-
-            try {
-                const roomRef = getRoomDocRef(state.roomCode);
-                await updateDoc(roomRef, {
-                    [`boards.${targetPlayerId}.cells`]: nums
-                });
-                showToast('สุ่มตัวเลข 1-25 ลงตารางเรียบร้อย!', 'success');
-            } catch (err) {
-                console.error("Random fill error:", err);
-                showToast('ไม่สามารถสุ่มตัวเลขได้', 'error');
-            }
-        }
-
-        function handleStartGame() {
-            if (!state.roomData || state.roomData.hostId !== currentUser.uid) return;
-
-            showConfirmModal(
-                'ยืนยันการเริ่มเกม?',
-                'เมื่อกดเริ่มเกมแล้ว ทุกคนจะไม่สามารถแก้ไขข้อความในตารางได้อีกต่อไป และจะเข้าสู่โหมดเล่นเกมทันที',
-                async () => {
-                    try {
-                        const roomRef = getRoomDocRef(state.roomCode);
-                        await updateDoc(roomRef, {
-                            status: 'playing'
-                        });
-                    } catch (err) {
-                        console.error("Start game error:", err);
-                        showToast('ไม่สามารถเริ่มเกมได้ กรุณาลองใหม่', 'error');
-                    }
-                }
-            );
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        // ==========================================
-        // EVENT LISTENERS
-        // ==========================================
-        tabCreate.addEventListener('click', () => {
-            tabCreate.className = 'py-2 text-sm font-medium rounded-lg bg-white text-indigo-600 shadow-xs transition-all';
-            tabJoin.className = 'py-2 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 transition-all';
-            panelCreate.classList.remove('hidden');
-            panelJoin.classList.add('hidden');
+        hostConn.on('open', () => {
+          hostConn.send({ type: 'JOIN', id: myId, name: myName });
         });
 
-        tabJoin.addEventListener('click', () => {
-            tabJoin.className = 'py-2 text-sm font-medium rounded-lg bg-white text-emerald-600 shadow-xs transition-all';
-            tabCreate.className = 'py-2 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 transition-all';
-            panelJoin.classList.remove('hidden');
-            panelCreate.classList.add('hidden');
-            roomCodeInput.focus();
+        hostConn.on('data', (data) => {
+          if (data.type === 'SYNC') {
+            gameState = data.state;
+            if (!viewingId || !gameState.players[viewingId]) viewingId = myId;
+            enterGameScreen();
+            renderAll();
+          }
         });
 
-        document.getElementById('btn-create-room').addEventListener('click', handleCreateRoom);
-        document.getElementById('btn-join-room').addEventListener('click', handleJoinRoom);
-        
-        roomCodeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleJoinRoom();
+        hostConn.on('close', () => {
+          alert('หัวหน้าห้องปิดการเชื่อมต่อแล้ว');
+          location.reload();
         });
+      });
 
-        document.getElementById('btn-copy-code').addEventListener('click', () => {
-            if (state.roomCode) copyToClipboard(state.roomCode);
-        });
+      peer.on('error', () => {
+        showStatus('ไม่พบห้องนี้ หรือรหัสห้องไม่ถูกต้อง');
+      });
+    }
 
-        document.getElementById('btn-leave-room').addEventListener('click', () => {
-            showConfirmModal(
-                'ออกจากห้องเล่นเกม?',
-                'คุณต้องการออกจากห้องนี้ใช่หรือไม่? (คุณสามารถใช้รหัสห้องเดิมกลับเข้ามาใหม่ได้)',
-                leaveRoom
-            );
-        });
+    // Host จัดการข้อมูลที่ได้รับจากเพื่อน
+    function handleHostReceive(conn, data) {
+      if (data.type === 'JOIN') {
+        gameState.players[data.id] = {
+          name: data.name,
+          board: Array(25).fill(''),
+          marks: Array(25).fill(false)
+        };
+        broadcastState();
+      } else if (data.type === 'EDIT_CELL' && !gameState.started) {
+        if (gameState.players[data.targetId]) {
+          gameState.players[data.targetId].board[data.index] = data.text;
+          broadcastState();
+        }
+      } else if (data.type === 'TOGGLE_MARK' && gameState.started) {
+        if (gameState.players[data.targetId]) {
+          gameState.players[data.targetId].marks[data.index] = !gameState.players[data.targetId].marks[data.index];
+          broadcastState();
+        }
+      }
+    }
 
-        btnStartGame.addEventListener('click', handleStartGame);
-        document.getElementById('btn-random-numbers').addEventListener('click', handleRandomFillNumbers);
+    // ส่งข้อมูลล่าสุดให้ทุกคนในห้อง
+    function broadcastState() {
+      renderAll();
+      connections.forEach(conn => {
+        if (conn.open) conn.send({ type: 'SYNC', state: gameState });
+      });
+    }
 
-        // Start App
-        window.addEventListener('DOMContentLoaded', initApp);
-    </script>
+    function enterGameScreen() {
+      document.getElementById('lobby-screen').classList.add('hidden');
+      document.getElementById('game-screen').classList.remove('hidden');
+      document.getElementById('bingo-counter').classList.remove('hidden');
+      document.getElementById('display-room-code').textContent = roomCode;
+      renderAll();
+    }
+
+    function copyRoomCode() {
+      navigator.clipboard.writeText(roomCode);
+      alert('คัดลอกรหัสห้อง ' + roomCode + ' เรียบร้อย!');
+    }
+
+    function startGame() {
+      if (!isHost) return;
+      if (!confirm('ยืนยันเริ่มเกม? หลังจากนี้จะไม่สามารถแก้ไขข้อความในตารางของใครได้อีก')) return;
+      gameState.started = true;
+      broadcastState();
+    }
+
+    // อัปเดตข้อความในช่อง
+    function updateCellText(index, value) {
+      if (gameState.started) return;
+      if (isHost) {
+        gameState.players[viewingId].board[index] = value;
+        broadcastState();
+      } else {
+        gameState.players[viewingId].board[index] = value;
+        hostConn.send({ type: 'EDIT_CELL', targetId: viewingId, index, text: value });
+      }
+    }
+
+    // กดวงกลมในช่อง
+    function toggleMark(index) {
+      if (!gameState.started) return;
+      // อนุญาตให้กดวงเฉพาะตารางของตัวเอง (หรือถ้าอยากให้กดของคนอื่นได้ด้วย สามารถลบเงื่อนไขบรรทัดล่างนี้ออกได้)
+      if (viewingId !== myId) return;
+
+      if (isHost) {
+        gameState.players[viewingId].marks[index] = !gameState.players[viewingId].marks[index];
+        broadcastState();
+      } else {
+        gameState.players[viewingId].marks[index] = !gameState.players[viewingId].marks[index];
+        renderAll();
+        hostConn.send({ type: 'TOGGLE_MARK', targetId: viewingId, index });
+      }
+    }
+
+    // คำนวณจำนวนบิงโก (แนวนอน 5, แนวตั้ง 5, แนวทแยง 2)
+    function countBingos(marks) {
+      const lines = [
+        [0,1,2,3,4], [5,6,7,8,9], [10,11,12,13,14], [15,16,17,18,19], [20,21,22,23,24], // แนวนอน
+        [0,5,10,15,20], [1,6,11,16,21], [2,7,12,17,22], [3,8,13,18,23], [4,9,14,19,24], // แนวตั้ง
+        [0,6,12,18,24], [4,8,12,16,20] // แนวทแยง
+      ];
+      let count = 0;
+      let winningCells = new Set();
+      lines.forEach(line => {
+        if (line.every(idx => marks[idx])) {
+          count++;
+          line.forEach(idx => winningCells.add(idx));
+        }
+      });
+      return { count, winningCells };
+    }
+
+    function renderAll() {
+      // ปุ่มเริ่มเกม (เฉพาะ Host ตอนยังไม่เริ่ม)
+      const btnStart = document.getElementById('btn-start-game');
+      if (isHost && !gameState.started) btnStart.classList.remove('hidden');
+      else btnStart.classList.add('hidden');
+
+      // ป้ายสถานะ
+      const badge = document.getElementById('phase-badge');
+      const hint = document.getElementById('edit-hint');
+      if (gameState.started) {
+        badge.textContent = 'กำลังเล่น (ล็อกตารางแล้ว)';
+        badge.className = 'text-xs font-medium px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        hint.textContent = viewingId === myId ? 'แตะช่องเพื่อวงกลม' : 'กำลังดูตารางเพื่อน (อ่านอย่างเดียว)';
+      } else {
+        badge.textContent = 'ช่วงเตรียมตัว (แก้ไขได้)';
+        hint.textContent = 'แตะช่องเพื่อพิมพ์ข้อความ';
+      }
+
+      // แท็บรายชื่อผู้เล่น
+      const tabsEl = document.getElementById('player-tabs');
+      tabsEl.innerHTML = '';
+      Object.entries(gameState.players).forEach(([id, p]) => {
+        const isSelected = id === viewingId;
+        const btn = document.createElement('button');
+        btn.className = `px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition border ${
+          isSelected 
+            ? 'bg-indigo-600 text-white border-indigo-500 shadow' 
+            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+        }`;
+        btn.textContent = p.name + (id === myId ? ' (คุณ)' : '');
+        btn.onclick = () => { viewingId = id; renderAll(); };
+        tabsEl.appendChild(btn);
+      });
+
+      // ข้อมูลตารางที่กำลังดู
+      const currentPlayer = gameState.players[viewingId];
+      if (!currentPlayer) return;
+      document.getElementById('viewing-player-name').textContent = currentPlayer.name;
+
+      // นับบิงโก
+      const { count, winningCells } = countBingos(currentPlayer.marks);
+      document.getElementById('bingo-count-num').textContent = count;
+
+      // วาดตาราง 5x5
+      const gridEl = document.getElementById('bingo-grid');
+      gridEl.innerHTML = '';
+      for (let i = 0; i < 25; i++) {
+        const cell = document.createElement('div');
+        const isMarked = currentPlayer.marks[i];
+        const isWin = winningCells.has(i);
+
+        cell.className = `relative rounded-xl border flex items-center justify-center p-1 text-center transition overflow-hidden ${
+          isWin 
+            ? 'bg-rose-950/50 border-rose-500/60' 
+            : 'bg-slate-800/80 border-slate-700/80'
+        } ${gameState.started && viewingId === myId ? 'cursor-pointer active:scale-95' : ''}`;
+
+        if (!gameState.started) {
+          // โหมดแก้ไขข้อความได้
+          const input = document.createElement('textarea');
+          input.value = currentPlayer.board[i] || '';
+          input.placeholder = '...';
+          input.className = 'w-full h-full bg-transparent text-center text-xs sm:text-sm text-white resize-none focus:outline-none flex items-center justify-center pt-3 sm:pt-5';
+          input.onchange = (e) => updateCellText(i, e.target.value);
+          cell.appendChild(input);
+        } else {
+          // โหมดเริ่มเล่นแล้ว (ล็อกข้อความ กดวงกลมได้)
+          const textSpan = document.createElement('span');
+          textSpan.className = 'text-xs sm:text-sm font-medium text-slate-100 break-words leading-tight select-none z-10';
+          textSpan.textContent = currentPlayer.board[i] || '';
+          cell.appendChild(textSpan);
+
+          if (isMarked) {
+            const circle = document.createElement('div');
+            circle.className = 'bingo-circle';
+            cell.appendChild(circle);
+          }
+
+          cell.onclick = () => toggleMark(i);
+        }
+
+        gridEl.appendChild(cell);
+      }
+    }
+  </script>
 </body>
 </html>
-```
